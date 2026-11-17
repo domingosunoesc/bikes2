@@ -13,6 +13,7 @@ import br.edu.ifc.bikes.repository.UsuarioRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -27,13 +28,26 @@ public class UsuarioService {
     private final PasswordEncoder passwordEncoder;
 
     public UsuarioResponseDTO create(UsuarioRequestDTO usuarioRequestDTO) {
+        if (usuarioRepository.existsByUsername(usuarioRequestDTO.username())) {
+            throw usernameAlreadyExists(usuarioRequestDTO.username());
+        }
+
         try {
             Usuario usuario = usuarioMapper.toUsuario(usuarioRequestDTO);
+            usuario.setRole(Usuario.Role.ROLE_CLIENTE);
             usuario.setPassword(passwordEncoder.encode(usuario.getPassword()));
             return usuarioMapper.toResponse(usuarioRepository.save(usuario));
-        }catch (RuntimeException ex){
-            throw new UsernameUniqueViolationException(String.format("O nome do usuário '%s' já existe", usuarioRequestDTO.username()));
+        } catch (DataIntegrityViolationException ex) {
+            if (usuarioRepository.existsByUsername(usuarioRequestDTO.username())) {
+                throw usernameAlreadyExists(usuarioRequestDTO.username());
+            }
+            throw ex;
         }
+    }
+
+    private UsernameUniqueViolationException usernameAlreadyExists(String username) {
+        return new UsernameUniqueViolationException(
+                String.format("O nome do usuário '%s' já existe", username));
     }
 
     @Transactional()

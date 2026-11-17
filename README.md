@@ -81,12 +81,12 @@ Fazer em conjunto com os estudantes
       ```
          {
             "username": "fabiojrp@gmail.com",
-            "password": "123456",
-            "role": "ROLE_ADMIN"
+            "password": "123456"
          }
       ```
-      - Os campos de auditoria serão inseridos posteriormente
-      - A senha será criptografada posteriormente fazendo uso de biblioteca
+      - O cadastro público sempre cria um usuário com perfil `CLIENTE`. O campo `role` não deve ser enviado.
+      - Administradores devem ser provisionados por um processo protegido, nunca pelo cadastro público.
+      - A senha é armazenada com hash BCrypt.
 
    #### Buscar usuário por id
    - Criar método `getById()` em [UsuarioService](source/v1/br/edu/ifc/bikes/service/UsuarioService.java) e [UsuarioController](source/v1/br/edu/ifc/bikes/web/controller/UsuarioController.java)
@@ -459,8 +459,93 @@ Dependência (`pom.xml`):
 
       ```
 
+---
+
+## Como executar o projeto
+
+### Pré-requisitos
+
+- JDK 25 instalado e disponível no `PATH` (`java -version` para conferir).
+- MySQL em execução.
+- Banco de dados `bikes` criado no MySQL:
+
+```sql
+CREATE DATABASE bikes;
+```
+
+A configuração em `src/main/resources/application.properties` conecta ao MySQL local (`localhost:3306/bikes`) usando as credenciais definidas nesse arquivo. Se necessário, ajuste URL, usuário e senha antes de iniciar. Essa configuração é para desenvolvimento local; não use credenciais de desenvolvimento em produção.
+
+O Hibernate está configurado com `spring.jpa.hibernate.ddl-auto=update`, então cria ou atualiza as tabelas a partir das entidades ao iniciar a aplicação.
+
+### Iniciar a aplicação
+
+Na raiz do projeto, execute:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+Em outros sistemas operacionais, use:
+
+```bash
+./mvnw spring-boot:run
+```
+
+Quando a inicialização terminar, a API estará disponível em `http://localhost:8080` e a documentação Swagger em `http://localhost:8080/docs-bikes.html`.
+
+Para executar os testes automatizados no Windows:
+
+```powershell
+.\mvnw.cmd test
+```
+
+Em outros sistemas operacionais:
+
+```bash
+./mvnw test
+```
+
+---
+
+## API de usuários (regras atuais)
+
+Todos os recursos estão disponíveis sob `/api/v1` e também são descritos no OpenAPI/Swagger em `/docs-bikes.html`.
+
+| Método e rota | Acesso | Descrição |
+|---|---|---|
+| `POST /usuarios` | Público | Cadastra usuário usando `username` como e-mail único e senha com exatamente 6 caracteres. O perfil é sempre `CLIENTE`. Retorna `201` com o ID gerado. |
+| `GET /usuarios/{id}` | JWT do próprio usuário ou de ADMIN | Localiza usuário pelo ID gerado. Retorna `404` se não existir. |
+| `PATCH /usuarios/{id}` | JWT do próprio usuário | Altera a senha; exige senha atual, nova senha e confirmação (todas com 6 caracteres). Retorna `204`. |
+| `GET /usuarios` | JWT de ADMIN | Lista todos os usuários. Requisições sem perfil ADMIN recebem `401`. |
+| `POST /auth` | Público | Autentica e retorna um JWT para usar no cabeçalho `Authorization: Bearer <token>`. |
+
+Cadastro:
+
+```json
+{
+  "username": "cliente@example.com",
+  "password": "123456"
+}
+```
+
+Alteração de senha:
+
+```json
+{
+  "senhaAtual": "123456",
+  "novaSenha": "654321",
+  "confirmaSenha": "654321"
+}
+```
+
+E-mail inválido, senha com tamanho diferente de seis caracteres e demais campos inválidos retornam `422`. E-mail já cadastrado retorna `409`; senha atual incorreta ou confirmação divergente retorna `400`. Senhas são armazenadas com BCrypt e nunca incluídas nas respostas.
+
+Por segurança, o cadastro público não aceita a atribuição de `ADMIN`. A criação do primeiro administrador deve ocorrer em um processo operacional protegido, persistindo o perfil `ROLE_ADMIN` e uma senha já codificada com BCrypt. Não há endpoint público de promoção de perfil.
+
+Os testes E2E executam a aplicação em porta aleatória e usam H2 isolado em memória. Execute com `.\mvnw.cmd test` no Windows ou `./mvnw test` em outros sistemas.
+
       #### Testando requisições seguras
-      - Primeiro testar as requisições sem autenticação (403 - forbiden).
+      - Primeiro testar as requisições sem autenticação (401 - unauthorized).
       - Apagar usuários atuais e cadastrar um novo, agora com senha cadastrada.
       - Fazer login (auth) e copiar token.
       - Colar token nas requisições seguras em: authorization -> Bearer token
